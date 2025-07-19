@@ -1,0 +1,243 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Calculadora de Riesgo de Deserción Universitaria - UNDC</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
+    <style>
+        body {
+            font-family: 'Inter', sans-serif;
+            background-image: linear-gradient(rgba(17, 24, 39, 0.95), rgba(17, 24, 39, 0.98)), url('https://images.unsplash.com/photo-1562774053-701939374585?q=80&w=2070&auto=format&fit=crop');
+            background-size: cover;
+            background-position: center;
+            background-attachment: fixed;
+        }
+        .question-card {
+            transition: opacity 0.5s ease-in-out, transform 0.5s ease-in-out;
+        }
+        .card-enter {
+            opacity: 0;
+            transform: translateY(20px);
+        }
+        .card-exit {
+            opacity: 0;
+            transform: translateY(-20px);
+        }
+        .progress-bar-fill {
+            transition: width 0.5s ease-in-out;
+        }
+        .option-card {
+            transition: background-color 0.2s, transform 0.2s;
+        }
+        .option-card:hover {
+            transform: translateY(-4px);
+            background-color: #15803d; /* green-700 */
+        }
+        .gauge-bg {
+            fill: none;
+            stroke: #374151; /* gray-700 */
+            stroke-width: 10;
+        }
+        .gauge-fg {
+            fill: none;
+            stroke-width: 10;
+            stroke-linecap: round;
+            transform: rotate(-90deg 100 100);
+            transition: stroke-dashoffset 1s ease-in-out, stroke 1s ease-in-out;
+        }
+    </style>
+</head>
+<body class="text-white flex items-center justify-center min-h-screen p-4">
+
+    <main class="w-full max-w-2xl bg-gray-800/80 backdrop-blur-sm p-6 sm:p-8 rounded-2xl shadow-2xl border border-green-700/50">
+        
+        <!-- Vista del Cuestionario -->
+        <div id="quiz-view">
+            <header class="text-center mb-6">
+                <h1 class="text-3xl sm:text-4xl font-bold text-transparent bg-clip-text bg-gradient-to-r from-green-400 to-yellow-300">Evaluación de Riesgo</h1>
+            </header>
+            
+            <!-- Barra de Progreso -->
+            <div class="w-full bg-gray-700 rounded-full h-2.5 mb-6">
+                <div id="progress-bar" class="bg-gradient-to-r from-green-500 to-yellow-400 h-2.5 rounded-full progress-bar-fill" style="width: 0%"></div>
+            </div>
+
+            <!-- Contenedor de Preguntas -->
+            <div id="question-container" class="question-card">
+                <!-- La pregunta actual se renderizará aquí -->
+            </div>
+        </div>
+
+        <!-- Vista de Resultados -->
+        <div id="result-container" class="hidden text-center">
+            <h2 class="text-2xl font-bold mb-4">Resultado de la Evaluación</h2>
+            <div class="relative w-48 h-48 mx-auto mb-4">
+                <svg class="w-full h-full" viewBox="0 0 200 200">
+                    <circle class="gauge-bg" cx="100" cy="100" r="90"></circle>
+                    <circle id="gauge-fg" class="gauge-fg" cx="100" cy="100" r="90" stroke-dasharray="565.48" stroke-dashoffset="565.48"></circle>
+                </svg>
+                <div id="percentage" class="absolute inset-0 flex items-center justify-center text-4xl font-bold">0%</div>
+            </div>
+            <p class="text-xl font-semibold">Nivel de Riesgo: <span id="risk-level" class="font-bold"></span></p>
+            <p id="advice" class="text-gray-300 mt-2 max-w-md mx-auto"></p>
+            <button id="reset-btn" class="mt-6 bg-green-800 hover:bg-green-700 text-white font-bold py-2 px-6 rounded-lg transition">
+                Realizar Nueva Evaluación
+            </button>
+        </div>
+    </main>
+
+    <script>
+        document.addEventListener('DOMContentLoaded', function () {
+            // --- DATOS DEL MODELO Y PREGUNTAS ---
+            const modelCoefficients = [-0.1706, 0.4632, 0.2947, 0.6277, 0.1724, 0.2281, 0.4445, 0.0886, -0.7388, 0.3804, 0.2831, -0.4282, 0.265, -0.669, -0.5895, -0.4905, -0.2818, 0.3592, 0.419];
+            const modelIntercept = 1.348;
+
+            const questions = [
+                { id: 'P1', text: '¿En qué medida dependes económicamente de otra persona para tus gastos universitarios?', options: { "No dependo de nadie": 1, "Dependo un poco": 2, "Dependo bastante": 3, "Dependo completamente": 4 } },
+                { id: 'P2', text: 'Si trabajas, ¿qué tanto afecta tu empleo a tu rendimiento académico?', options: { "No afecta": 1, "Afecta un poco": 2, "Afecta bastante": 3, "Afecta mucho": 4 } },
+                { id: 'P3', text: 'Si brindas apoyo a tu familia, ¿cuánto interfiere esto con tus estudios?', options: { "No interfiere": 1, "Interfiere poco": 2, "Interfiere bastante": 3, "Interfiere mucho": 4 } },
+                { id: 'P4', text: '¿Cuánto influye tu situación económica en tu posibilidad de continuar?', options: { "No influye": 1, "Influye un poco": 2, "Influye bastante": 3, "Influye mucho": 4 } },
+                { id: 'P5', text: '¿En qué medida tu estado de salud repercute en tu capacidad para seguir?', options: { "No repercute": 1, "Repercute ligeramente": 2, "Repercute bastante": 3, "Repercute mucho": 4 } },
+                { id: 'P6', text: 'Si tienes pareja, ¿cómo influye esta relación en tu desempeño?', options: { "No afecta": 1, "Afecta un poco": 2, "Afecta bastante": 3, "Afecta mucho": 4 } },
+                { id: 'P7', text: '¿Las otras actividades que realizas afectan tu tiempo de estudio?', options: { "No afectan": 1, "Afectan un poco": 2, "Afectan bastante": 3, "Afectan mucho": 4 } },
+                { id: 'P8', text: 'Si experimentas violencia familiar, ¿cuánto afecta a tu rendimiento?', options: { "No afecta": 1, "Afecta poco": 2, "Afecta bastante": 3, "Afecta mucho": 4 } },
+                { id: 'P9', text: '¿En qué medida la interacción con tus profesores afecta tu desempeño?', options: { "No influye": 1, "Influye poco": 2, "Influye bastante": 3, "Influye mucho": 4 } },
+                { id: 'P10', text: '¿Cómo afecta el acoso de tus compañeros a tu rendimiento?', options: { "No me afecta": 1, "Me afecta poco": 2, "Me afecta bastante": 3, "Me afecta mucho": 4 } },
+                { id: 'P11', text: '¿La distancia entre tu hogar y la universidad afecta tu asistencia?', options: { "No afecta": 1, "Afecta un poco": 2, "Afecta bastante": 3, "Afecta mucho": 4 } },
+                { id: 'P12', text: '¿Te sientes cómodo con tus compañeros de clase?', options: { "Nada cómodo": 1, "Poco cómodo": 2, "Bastante cómodo": 3, "Muy cómodo": 4 } },
+                { id: 'P13', text: '¿Has experimentado discriminación en la universidad?', options: { "Ninguna": 1, "Poca": 2, "Bastante": 3, "Mucha": 4 } },
+                { id: 'P14', text: '¿Crees que dedicas suficiente tiempo al estudio?', options: { "Insuficiente": 1, "Poco tiempo": 2, "Bastante tiempo": 3, "Mucho tiempo": 4 } },
+                { id: 'P15', text: '¿Consideras que tu carrera te facilitará encontrar empleo?', options: { "No me ayudará": 1, "Me ayudará poco": 2, "Me ayudará bastante": 3, "Me ayudará mucho": 4 } },
+                { id: 'P16', text: '¿Tus expectativas académicas se cumplieron al salir del colegio?', options: { "No se cumplieron": 1, "Se cumplieron poco": 2, "Se cumplieron bastante": 3, "Se cumplieron totalmente": 4 } },
+                { id: 'P17', text: '¿Los conocimientos adquiridos te son útiles en otros aspectos?', options: { "No son útiles": 1, "Poco útiles": 2, "Bastante útiles": 3, "Muy útiles": 4 } },
+                { id: 'P18', text: '¿La influencia de tu familia afectó tu elección de carrera?', options: { "No influyó": 1, "Influyó poco": 2, "Influyó bastante": 3, "Influyó mucho": 4 } },
+                { id: 'P19', text: '¿Tenías en mente estudiar una carrera diferente a la que elegiste?', options: { "No, siempre quise esta": 1, "Lo pensé poco": 2, "Lo consideré bastante": 3, "Sí, quería otra": 4 } }
+            ];
+
+            // --- LÓGICA DE LA APLICACIÓN INTERACTIVA ---
+            const quizView = document.getElementById('quiz-view');
+            const resultContainer = document.getElementById('result-container');
+            const questionContainer = document.getElementById('question-container');
+            const progressBar = document.getElementById('progress-bar');
+            
+            let currentQuestionIndex = 0;
+            const userAnswers = [];
+
+            function displayQuestion(index) {
+                const question = questions[index];
+                if (!question) {
+                    calculateAndShowResult();
+                    return;
+                }
+
+                // Animación de salida
+                questionContainer.classList.add('card-exit');
+
+                setTimeout(() => {
+                    let optionsHtml = '';
+                    Object.entries(question.options).forEach(([text, value]) => {
+                        optionsHtml += `<button data-value="${value}" class="option-card w-full text-left bg-green-600/80 p-4 rounded-lg shadow-md">${text}</button>`;
+                    });
+
+                    questionContainer.innerHTML = `
+                        <h2 class="text-xl sm:text-2xl font-semibold mb-6 text-gray-200">${index + 1}. ${question.text}</h2>
+                        <div class="space-y-3">
+                            ${optionsHtml}
+                        </div>
+                    `;
+                    
+                    // Animación de entrada
+                    questionContainer.classList.remove('card-exit');
+                    questionContainer.classList.add('card-enter');
+                    setTimeout(() => questionContainer.classList.remove('card-enter'), 10);
+
+                    // Añadir listeners a las nuevas opciones
+                    document.querySelectorAll('.option-card').forEach(button => {
+                        button.addEventListener('click', handleOptionClick);
+                    });
+
+                }, 500); // Coincide con la duración de la transición CSS
+            }
+
+            function handleOptionClick(e) {
+                const selectedValue = parseInt(e.target.dataset.value, 10);
+                userAnswers.push(selectedValue);
+                currentQuestionIndex++;
+                
+                // Actualizar barra de progreso
+                const progress = (currentQuestionIndex / questions.length) * 100;
+                progressBar.style.width = `${progress}%`;
+
+                displayQuestion(currentQuestionIndex);
+            }
+
+            function calculateAndShowResult() {
+                quizView.style.display = 'none';
+                resultContainer.classList.remove('hidden');
+
+                let z = modelIntercept;
+                for (let i = 0; i < userAnswers.length; i++) {
+                    z += modelCoefficients[i] * userAnswers[i];
+                }
+                const probability = 1 / (1 + Math.exp(-z));
+                displayResult(probability);
+            }
+
+            function displayResult(probability) {
+                const percentage = Math.round(probability * 100);
+                let riskLevel, advice, colorClass, strokeColor;
+
+                if (percentage < 35) {
+                    riskLevel = 'Bajo';
+                    advice = '¡Vas por buen camino! Tu situación parece estable. Sigue esforzándote y no dudes en buscar apoyo si lo necesitas.';
+                    colorClass = 'text-green-400';
+                    strokeColor = '#4ade80';
+                } else if (percentage < 65) {
+                    riskLevel = 'Medio';
+                    advice = 'Existen algunos factores de riesgo. Es un buen momento para identificar áreas de mejora y buscar recursos de apoyo en tu universidad, como tutorías o consejería.';
+                    colorClass = 'text-yellow-400';
+                    strokeColor = '#facc15';
+                } else {
+                    riskLevel = 'Alto';
+                    advice = 'Tu situación presenta varios factores de riesgo importantes. Es crucial que busques ayuda proactivamente. Habla con un tutor, un consejero académico o los servicios de bienestar estudiantil de tu universidad.';
+                    colorClass = 'text-red-400';
+                    strokeColor = '#f87171';
+                }
+                
+                const gaugeFg = document.getElementById('gauge-fg');
+                const percentageText = document.getElementById('percentage');
+                const riskLevelText = document.getElementById('risk-level');
+                const adviceText = document.getElementById('advice');
+                const gaugeCircumference = 2 * Math.PI * 90;
+
+                const offset = gaugeCircumference * (1 - probability);
+                gaugeFg.style.strokeDashoffset = offset;
+                gaugeFg.style.stroke = strokeColor;
+
+                percentageText.textContent = `${percentage}%`;
+                percentageText.className = `absolute inset-0 flex items-center justify-center text-4xl font-bold ${colorClass}`;
+                riskLevelText.textContent = riskLevel;
+                riskLevelText.className = `font-bold ${colorClass}`;
+                adviceText.textContent = advice;
+            }
+            
+            document.getElementById('reset-btn').addEventListener('click', () => {
+                currentQuestionIndex = 0;
+                userAnswers.length = 0;
+                resultContainer.classList.add('hidden');
+                quizView.style.display = 'block';
+                progressBar.style.width = '0%';
+                displayQuestion(0);
+            });
+
+            // Iniciar la aplicación
+            displayQuestion(currentQuestionIndex);
+        });
+    </script>
+</body>
+</html>
+
